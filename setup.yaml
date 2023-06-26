@@ -1,0 +1,217 @@
+- name: Get architecture
+  hosts: all
+  become: true
+  tasks:
+    - name: Set variable
+      ansible.builtin.set_fact:
+        arch: "{{ {'aarch64': 'arm64', 'x86_64': 'amd64'}[ansible_architecture] | default(ansible_architecture) }}"
+
+- name: Stop PackageKit
+  become: true
+  hosts: all
+  tasks:
+    - name: Stop packagekit service to avoid issues during installation
+      ansible.builtin.systemd:
+        name: packagekit
+        state: stopped
+
+- name: Manage app repositories
+  become: true
+  hosts: all
+  pre_tasks:
+    - name: Add default flathub
+      community.general.flatpak_remote:
+        name: flathub
+        flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
+        state: present
+    - name: Add deadsnakes PPA
+      ansible.builtin.apt_repository:
+        repo: ppa:deadsnakes/ppa
+        state: present
+    - name: Add Remmina PPA
+      ansible.builtin.apt_repository:
+        repo: ppa:remmina-ppa-team/remmina-next
+        state: present
+  roles:
+    - name: Add docker PPA
+      role: add-ppa
+      vars:
+        key_name: docker
+        key_url: https://download.docker.com/linux/ubuntu/gpg
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://download.docker.com/linux/ubuntu {{ ansible_facts.distribution_release }} stable"
+    - name: Add Node 16 PPA
+      role: add-ppa
+      vars:
+        key_name: nodesource
+        key_url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+        key_type: asc
+        repo: "deb https://deb.nodesource.com/node_16.x {{ ansible_facts.distribution_release }} main"
+    - name: Helm PPA
+      role: add-ppa
+      vars:
+        key_name: helm
+        key_url: https://baltocdn.com/helm/signing.asc
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://baltocdn.com/helm/stable/debian/ all main"
+    - role: add-ppa
+      vars:
+        key_name: mongodb-server
+        key_url: https://www.mongodb.org/static/pgp/server-5.0.asc
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://repo.mongodb.org/apt/ubuntu {{ ansible_facts.distribution_release }}/mongodb-org/5.0 multiverse"
+    - role: add-ppa
+      vars:
+        key_name: microsoft
+        key_url: https://packages.microsoft.com/keys/microsoft.asc
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://packages.microsoft.com/repos/vscode stable main"
+    - role: add-ppa
+      vars:
+        key_name: microsoft
+        key_url: https://packages.microsoft.com/keys/microsoft.asc
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://packages.microsoft.com/repos/azure-cli/ {{ ansible_facts.distribution_release }} main"
+    - role: add-ppa
+      vars:
+        key_name: hashicorp
+        key_url: https://apt.releases.hashicorp.com/gpg
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://apt.releases.hashicorp.com {{ ansible_facts.distribution_release }} main"
+    - role: add-ppa
+      vars:
+        key_name: google-cloud
+        key_url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        key_type: asc
+        repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+    - role: add-ppa
+      vars:
+        key_name: owncloud
+        key_url: https://download.owncloud.com/desktop/ownCloud/stable/latest/linux/Ubuntu_22.04/Release.key
+        key_type: asc
+        repo: "deb https://download.owncloud.com/desktop/ownCloud/stable/latest/linux/Ubuntu_22.04/ /"
+    - role: add-ppa
+      vars:
+        key_name: k8s-lens
+        key_url: https://downloads.k8slens.dev/keys/gpg
+        key_type: asc
+        repo: "deb [arch={{ arch }}] https://downloads.k8slens.dev/apt/debian stable main"
+
+- name: Install packages
+  become: true
+  hosts: all
+  vars:
+    sops_version: 3.7.3
+  tasks:
+    - name: Install pip packages
+      ansible.builtin.pip:
+        name:
+          - pipenv
+          - pre-commit
+          - ansible
+          - ansible-lint
+        state: present
+    - name: Install apt packages
+      ansible.builtin.apt:
+        update_cache: true
+        package:
+          # Node
+          - nodejs
+          # Python
+          - python3.10-venv
+          # Docker
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+          # MongoDB
+          - mongodb-database-tools
+          - mongocli
+          # Microsoft
+          - code
+          - azure-cli
+          # Terraform
+          - terraform
+          # Remote Desktop
+          - remmina
+          - remmina-plugin-rdp
+          - remmina-plugin-secret
+          # Kubernetes
+          - kubectl
+          - helm
+          - lens
+          # Secrets
+          - vault
+        state: present
+    - name: Install Chrome
+      ansible.builtin.apt:
+        deb: https://github.com/mozilla/sops/releases/download/v{{ sops_version }}/sops_{{ sops_version }}_amd64.deb
+        state: present
+    - name: Install MongoDB Compass
+      ansible.builtin.apt:
+        deb: https://downloads.mongodb.com/compass/mongodb-compass_1.34.2_amd64.deb
+        state: present
+    - name: Install Zoom flatpak
+      community.general.flatpak:
+        name:
+          # Postman
+          - com.getpostman.Postman
+          # Browser
+          - com.google.Chrome
+        state: present
+
+- name: Configuration
+  hosts: all
+  tasks:
+    - name: Add current user to docker group
+      become: true
+      ansible.builtin.user:
+        name: "{{ ansible_user_id }}"
+        append: true
+        groups:
+          - docker
+        state: present
+    - name: Install VSCode plugins
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/code
+          - --user-data-dir
+          - "{{ ansible_env.HOME }}/.config/Code"
+          - --force
+          - --install-extension
+          - signageos.signageos-vscode-sops
+          - --install-extension
+          - redhat.ansible
+          - --install-extension
+          - HashiCorp.terraform
+          - --install-extension
+          - GitHub.vscode-github-actions
+          - --install-extension
+          - HashiCorp.HCL
+          - --install-extension
+          - samuelcolvin.jinjahtml
+          - --install-extension
+          - mhutchie.git-graph
+          - --install-extension
+          - donjayamanne.githistory
+          - --install-extension
+          - GitHub.github-vscode-theme
+          - --install-extension
+          - eamodio.gitlens
+          - --install-extension
+          - redhat.vscode-yaml
+          - --install-extension
+          - ms-azuretools.vscode-docker
+    - name: Enable corepack for node package management
+      become: true
+      ansible.builtin.command:
+        cmd: corepack enable
+
+- name: Start PackageKit
+  become: true
+  hosts: all
+  tasks:
+    - name: Start packagekit to restore functionality
+      ansible.builtin.systemd:
+        name: packagekit
+        state: started

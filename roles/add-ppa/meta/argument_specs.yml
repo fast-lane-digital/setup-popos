@@ -1,0 +1,19 @@
+argument_specs:
+  main:
+    options:
+      key_url:
+        type: str
+        required: true
+        description: The URL from which to fetch the repository signing key.
+      key_name:
+        type: str
+        required: true
+        description: The name under which the key will be saved.
+      key_type:
+        type: str
+        required: true
+        description: The file ending with which the downloaded key will be stored.
+      repo:
+        type: str
+        required: true
+        description: The repository definition.

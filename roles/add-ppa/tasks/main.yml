@@ -1,0 +1,14 @@
+- name: Download signing key
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ key_url }}"
+    dest: "/etc/apt/trusted.gpg.d/{{ key_name }}.{{ key_type }}"
+    mode: "644"
+
+- name: Add PPA
+  become: true
+  ansible.builtin.apt_repository:
+    filename: "{{ key_name }}"
+    repo: "{{ repo }}"
+    state: present
+    update_cache: false
