@@ -40,13 +40,6 @@
         key_url: https://download.docker.com/linux/ubuntu/gpg
         key_type: asc
         repo: "deb [arch={{ arch }}] https://download.docker.com/linux/ubuntu {{ ansible_facts.distribution_release }} stable"
-    - name: Add Node 16 PPA
-      role: add-ppa
-      vars:
-        key_name: nodesource
-        key_url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-        key_type: asc
-        repo: "deb https://deb.nodesource.com/node_16.x {{ ansible_facts.distribution_release }} main"
     - name: Helm PPA
       role: add-ppa
       vars:
@@ -96,6 +89,12 @@
         key_url: https://downloads.k8slens.dev/keys/gpg
         key_type: asc
         repo: "deb [arch={{ arch }}] https://downloads.k8slens.dev/apt/debian stable main"
+    - role: add-ppa
+      vars:
+        key_name: google-chrome
+        key_url: https://dl.google.com/linux/linux_signing_key.pub
+        key_type: asc
+        repo: "deb [arch={{ arch }}] http://dl.google.com/linux/chrome/deb/ stable main"
 
 - name: Install packages
   become: true
@@ -115,10 +114,10 @@
       ansible.builtin.apt:
         update_cache: true
         package:
-          # Node
-          - nodejs
           # Python
           - python3.10-venv
+          - python3.11
+          - python3.11-venv
           # Docker
           - docker-ce
           - docker-ce-cli
@@ -142,6 +141,8 @@
           - lens
           # Secrets
           - vault
+          # Browser
+          - google-chrome-stable
         state: present
     - name: Install Chrome
       ansible.builtin.apt:
@@ -156,9 +157,12 @@
         name:
           # Postman
           - com.getpostman.Postman
-          # Browser
-          - com.google.Chrome
         state: present
+    - name: Install nvm
+      ansible.builtin.shell: >
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+      args:
+        creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
 
 - name: Configuration
   hosts: all
@@ -172,6 +176,7 @@
           - docker
         state: present
     - name: Install VSCode plugins
+      when: true
       ansible.builtin.command:
         argv:
           - /usr/bin/code
@@ -202,10 +207,6 @@
           - redhat.vscode-yaml
           - --install-extension
           - ms-azuretools.vscode-docker
-    - name: Enable corepack for node package management
-      become: true
-      ansible.builtin.command:
-        cmd: corepack enable
 
 - name: Start PackageKit
   become: true
