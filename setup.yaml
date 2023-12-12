@@ -32,6 +32,10 @@
       ansible.builtin.apt_repository:
         repo: ppa:remmina-ppa-team/remmina-next
         state: present
+    - name: Add PPA for PHP
+      ansible.builtin.apt_repository:
+        repo: ppa:ondrej/php
+        state: present
   roles:
     - name: Add docker PPA
       role: add-ppa
@@ -143,6 +147,25 @@
           - vault
           # Browser
           - google-chrome-stable
+          # Magento
+          - nginx
+          - php8.1
+          - php8.1-curl
+          - php8.1-bcmath
+          - php8.1-cli
+          - php8.1-common
+          - php8.1-dev
+          - php8.1-gd
+          - php8.1-intl
+          - php8.1-mbstring
+          - php8.1-mysql
+          - php8.1-soap
+          - php8.1-xml
+          - php8.1-xmlrpc
+          - php8.1-zip
+          - php8.1-fpm
+          - imagemagick # version has to be 7.1.1 or greather. After it is installed when you go convert --version it has to be the same version
+          - php8.1-imagick
         state: present
     - name: Install Chrome
       ansible.builtin.apt:
@@ -158,9 +181,27 @@
           # Postman
           - com.getpostman.Postman
         state: present
+    - name: Get composer setup script checksum
+      ansible.builtin.uri:
+        url: https://composer.github.io/installer.sig
+        return_content: true
+      register: composer_setup_checksum
+    - name: Get composer setup script
+      ansible.builtin.get_url:
+        url: https://getcomposer.org/installer
+        checksum: "sha384:{{ composer_setup_checksum.content }}"
+        dest: /tmp/composer-setup.php
+    - name: Install composer with setup script
+      ansible.builtin.command:
+        argv:
+          - php
+          - /tmp/composer-setup.php
+          - --install-dir=/usr/local/bin
+          - --filename=composer
+          - --2
     - name: Install nvm
       ansible.builtin.shell: >
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+        set -o pipefail && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
       args:
         creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
 
@@ -201,8 +242,6 @@
           - donjayamanne.githistory
           - --install-extension
           - GitHub.github-vscode-theme
-          - --install-extension
-          - eamodio.gitlens
           - --install-extension
           - redhat.vscode-yaml
           - --install-extension
